@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Resume Checker</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="container">
+    <h1>AI Resume Checker</h1>
+    <form id="upload-form" method="POST" enctype="multipart/form-data">
+      <input type="file" name="resume" accept=".pdf,.txt,.doc,.docx" required />
+      <button type="submit">Check Resume</button>
+    </form>
+    {% if feedback %}
+      <div class="results">
+        <h2>Feedback:</h2>
+        <ul>
+          {% for point in feedback %}
+            <li>{{ point }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+  </div>
+</body>
+</html>
