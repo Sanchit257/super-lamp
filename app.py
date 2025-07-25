@@ -2,8 +2,10 @@ from flask import Flask, render_template, request
 from werkzeug.utils import secure_filename
 import os
 import re
-
+from transformers import pipeline
 from PyPDF2 import PdfReader
+from dotenv import load_dotenv
+load_dotenv()
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -18,33 +20,55 @@ def extract_text(path):
     if path.endswith(".pdf"):
         with open(path, 'rb') as f:
             reader = PdfReader(f)
-            return " ".join([page.extract_text() or "" for page in reader.pages])
+            raw = " ".join([page.extract_text() or "" for page in reader.pages])
+            return re.sub(r'\s+', ' ', raw).strip()
     elif path.endswith(".txt"):
         with open(path, 'r', encoding='utf-8') as f:
             return f.read()
     return ""
 
-def generate_feedback(text):
-    feedback = []
-    if len(text.split()) < 150:
-        feedback.append("Your resume seems too short. Aim for at least 1 page of content.")
 
-    if not re.search(r'\b(email|phone|linkedin|contact)\b', text, re.IGNORECASE):
-        feedback.append("Missing clear contact information (email, phone, etc).")
 
-    if not re.findall(r'•|-|\*', text):
-        feedback.append("Use bullet points to make content easier to scan.")
+generator = pipeline(
+    "text-generation",
+    model="tiiuae/falcon-rw-1b",
+    device=-1  # use CPU
+)
 
-    if "skills" not in text.lower():
-        feedback.append("Include a 'Skills' section to highlight your technical abilities.")
 
-    if not re.findall(r'\b(designed|developed|led|managed|built|created|implemented)\b', text, re.IGNORECASE):
-        feedback.append("Use strong action verbs to begin bullet points.")
+def generate_feedback(resume_text):
+    prompt = (
+    "You're a professional recruiter. Give 3 short, helpful, and honest bullet points of resume feedback based on this text:\n\n"
+    f"{resume_text[:1000]}\n\n"  # truncate long resumes
+    "Feedback:"
+    )
 
-    if not feedback:
-        feedback.append("Your resume looks structurally sound. Great job!")
 
-    return feedback
+    try:
+        outputs = generator(prompt, max_new_tokens=100, temperature=0.7)
+        
+        if not outputs:
+            return ["No output from model. Try using a more detailed resume."]
+
+        output = outputs[0]
+        if "generated_text" not in output:
+            return ["Model did not return any generated text."]
+
+        result = output['generated_text']
+        feedback_only = result.split("Feedback:")[-1].strip()
+
+        # Handle empty feedback
+        if not feedback_only:
+            return ["Model produced empty feedback."]
+
+        # Format bullet points
+        lines = feedback_only.split('\n')
+        cleaned = [line.strip("•- ") for line in lines if line.strip()]
+        return [f"• {line}" for line in cleaned if len(line) > 5]
+
+    except Exception as e:
+        return [f"Error generating feedback: {str(e)}"]
+
 
 @app.route("/", methods=["GET", "POST"])
 def index():
